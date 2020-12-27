@@ -1,0 +1,162 @@
+
+(this README was written by	A Mennucci, Mar 2001, Dec 2003, Apr 2005)
+
+hi 
+
+the code in libmorph is
+   Written and Copyright (C) 1994-2000 by Michael J. Gourlay
+   Written and Copyright (C) 2000-2005 by Andrea Mennucci
+
+libmorph contains the code to:
+- warp images (in any nonindexed color format, with user-settable pixel types),
+	 according to the George Wolberg's "Digital Image Warping"
+        	       IEEE Computer Society Press order number 1944
+	 (with changes by A.M., in dec 2003)
+- other handling of images (only with colors in rrr..ggg...bbb.. ordering)
+- load and save images in TGA format (although 'save' is rumored to not work ok)
+- meshes: load, save, change, copy, backup, ....
+
+
+there is no explicit documentation, but the code is well commented and
+easy to use
+
+libmorph DOESN'T contain the code to:
+ view and edit meshes using GTK+ : this is contained in 'gtkmorph/mesh-gtk.c'
+ view and edit meshes using X toolkits : this is  in 'xmorph/morph_cb.c'
+
+otherwise libmorph would have to be linked to the specific libraries
+
+--------
+
+here is a list of most important features and improvements
+
+--- warp2.c warp2.h
+
+This is description of the new versatile code to warp images; see also warp.h , warp2.h
+
+In libmorph/warp.h you can change the pixel type, the relevant defines are
+#define PIXEL_TYPE unsigned char
+#define PIXEL_MIN 0
+#define PIXEL_MAX 255
+
+another (untested) example may be
+
+#include </usr/include/asm/types.h>
+#define PIXEL_TYPE u16
+#define PIXEL_MIN 0
+#define PIXEL_MAX 65535
+
+Be aware that there may be no gain in quality in using pixel types with more than
+16 bits: the code in  libmorph/resample.c  uses a table to compute the
+values of sinc(x) and this table provides at most 10bits precision;
+if you use more pixels, you may 
+- create a larger table, or 
+- use the "float  sinc(float x)" call:  comment out the line in the code
+	#define KERNEL_sinc_fast
+
+--
+
+I have introduced a new call
+
+void
+warp_image_versatile
+  (const PIXEL_TYPE *src,
+   int s_width, int s_height, int s_channels, int s_rowstride,int s_xstride,
+   PIXEL_TYPE *dst,
+   int d_width, int d_height, int d_channels, int d_rowstride,int d_xstride,
+   const double *xs, const double *ys,  const double *xd, const double *yd,
+   int mesh_width, int mesh_height)
+
+that can warp images of different sizes, with colors, with any
+arrangment of data in memory (not only RRRGGGBBB but also RGBRGB.. );
+moreover, with the old code, you had to use meshes were the border of the mesh
+was on the border of the image; with this, you don't (the mesh can even go 
+outside the image).
+Summarizing: warp_image_versatile can warp any image that is not indexed
+See warp2.h for the documentation of the parameters.
+
+
+
+there are other APIs for the same functions, such as
+
+void
+warp_image_a_m
+(const PIXEL_TYPE *src,
+ int s_width, int s_height, int s_channels, int s_rowstride,int s_xstride,
+ PIXEL_TYPE *dst,
+ int d_width, int d_height, int d_channels, int d_rowstride,int d_xstride,
+ MeshT *srcmesh, MeshT *dstmesh);
+
+and moreover...
+
+--- warp-gtk.h
+
+If you use gtk2.0 or gdk-pixbuf, then you will love this call
+
+void warp_image_gdk_m
+( GdkPixbuf *src, GdkPixbuf *dst,
+  MeshT *srcmesh, MeshT *dstmesh)
+
+that wraps up the previous one (it simply uses the control parameters
+of the src and dst to fill in the correct values for warp_image_versatile).
+
+--- resample.h
+
+This new warping code has also many different antialiasing filters; the call 
+
+void mesh_resample_choose_aa_by_name(char *s);
+
+
+decides which one the warping code will use, in this list (from resample.c)
+
+ "near_neighbor" , //choose nearest pixel: fastest, looks bad
+ "bilinear", //bilinear: same as with the old libmorph warping code
+ "lanczos", //Lanczos:  much better quality, a must for animations
+    //and/or fine grained images; it is though  slower,
+ "lanczos4",// even better than before, but no noticeable difference on 
+    // most images
+
+
+--- varia in mesh.c mesh.h
+
+various routines to access data in the meshes (I like them better than
+accessing the arrays themselves: it makes for more clean programming)
+
+---  mesh labels
+
+to any point in the mesh there is an associate label (an integer)
+
+this is good for labeling and selecting (and it is used in gtkmorph)
+
+for example, the smoothing routines in relax.c do not move selected points
+
+---mesh-getext.h
+
+reading data in meshes so that the mesh is implicitely extended infinitely
+(by mirroring it at the border)
+
+--- relax.c
+
+this routines smooths meshes, with elastic energy or thin plate spline
+energy
+
+--- Ref counting
+I have modified the meshes code in libmorph to use reference counting
+
+this is good for porting libmorph in python (or any language that
+needs garbage collecting) or for easier use in GTK .
+
+this way, a program should call meshAlloc(this) to alloc a mesh, but
+call meshUnref(this) to free it.
+
+For this reason the function meshFree is deprecated.
+
+if a program doesnt use reference counting (xmorph doesnt) and uses
+meshFree then it should define NDEBUG_LIBMORPH_REF_COUNT or NDEBUG to
+avoid the warning
+
+if a program defines
+#define LIBMORPH_STRICTLY_REF_COUNT
+then the function meshFree will abort if the reference counting is not zero
+----
+
